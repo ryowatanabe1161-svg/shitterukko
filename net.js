@@ -97,6 +97,7 @@ function startClient(code, name) {
     else if (e.type === 'browser-incompatible') connecting(true, 'このブラウザは対応していません', 'Chrome / Safari の最新版でお試しください');
   });
   clearInterval(client.hbTimer); client.hbTimer = setInterval(clientHeartbeat, HB_MS);
+  if (PARTY) client.watch = setInterval(function () { if (!client) return; if (client.everJoined) { clearInterval(client.watch); return; } if (client.peer.open && !(client.conn && client.conn.open)) clientConnect(); }, FuuParty.watchMs);   // みんなの部屋：ホストより先に着いたときの取りこぼし対策
   setTimeout(function () { if (client && !client.everJoined && $('connecting').classList.contains('active')) $('connText').textContent = 'つながりにくいようです。コードが正しいか、ホストが部屋を開いているか確認してください。（通信環境によっては接続できない場合があります）'; }, 15000);
 }
 function clientConnect() {
@@ -138,7 +139,7 @@ function clientLost() {
 function leaveClient(sendLeave) {
   if (!client) return;
   if (sendLeave && client.conn && client.conn.open) { try { client.conn.send({ t: 'leave' }); } catch (e) {} }
-  clearInterval(client.hbTimer); clearTimeout(client.retryT);
+  clearInterval(client.hbTimer); clearInterval(client.watch); clearTimeout(client.retryT);
   var p = client.peer; client = null;
   setTimeout(function () { try { p.destroy(); } catch (e) {} }, 300);
   banner(''); connecting(false); show('title'); renderTitle();
