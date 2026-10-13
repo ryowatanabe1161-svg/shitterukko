@@ -22,7 +22,7 @@ function play(seats, o, r) {
       if (s.kind !== 'human') return; const hb = s.hb;
       if (G.phase === 'night' && G.nstep === 'master' && i === G.master) L.masterOk(G, i, now);
       if (G.phase === 'qa') {
-        if (i === G.master) { const e = G.pending.find(x => x.human); if (e && now - e.at > 150) { const h = hb.hedge ? hedgeAnswer(G, e, r, hb) : null; if (h) { L.answer(G, i, e.qid, h.a, now, h.note); return; } let a = K.answerParsed(DB, e.parsed, G.secret); if (a !== 'correct' && r() < hb.err) a = a === 'y' ? 'n' : a === 'n' ? 'y' : 'u'; if (e.parsed.t === 'guess') a = a === 'correct' ? 'correct' : 'n'; L.answer(G, i, e.qid, a === 'correct' && e.parsed.t !== 'guess' ? 'y' : a, now); } return; }
+        if (i === G.master) { const e = G.pending.find(x => x.human); if (e && now - e.at > (hb.delay || 150)) { const h = hb.hedge ? hedgeAnswer(G, e, r, hb) : null; if (h) { L.answer(G, i, e.qid, h.a, now, h.note); return; } let a = K.answerParsed(DB, e.parsed, G.secret); if (a !== 'correct' && r() < hb.err) a = a === 'y' ? 'n' : a === 'n' ? 'y' : 'u'; if (e.parsed.t === 'guess') a = a === 'correct' ? 'correct' : 'n'; L.answer(G, i, e.qid, a === 'correct' && e.parsed.t !== 'guess' ? 'y' : a, now); } return; }
         if (!hNext[i]) hNext[i] = now + 300 * hb.gap * r();
         if (now >= hNext[i] && !G.pending.some(e => e.p === i)) {
           hNext[i] = now + 330 * hb.gap * (0.6 + r() * 0.8);
