@@ -180,7 +180,7 @@ function npcAsk(G, i, now) {
   if (role === 'insider') c = B.chooseInsider(G.pub, Pc, G.secret, { frac: frac, r: r });
   else c = B.chooseCommon(G.pub, Pc, { frac: frac, r: r });
   var text;
-  if (c.w != null) { if (G.pub.dead[c.w] && c.w !== G.secret) return; text = line(G, i, 'guess', { w: G.db.words[c.w].w, p: pct(c.p || 0.5) }); L.ask(G, i, { w: c.w }, now, { text: text }); }
+  if (c.w != null) { if (G.pub.dead[c.w] && c.w !== G.secret) return; text = line(G, i, 'guess', { w: G.db.words[c.w].w, p: pct(c.p || 0.5) }); var why = basis(G, c.w); if (why && r() < (role === 'insider' ? 0.85 : 0.4)) text = why + text; L.ask(G, i, { w: c.w }, now, { text: text }); }
   else {
     var used = G._said || (G._said = {}), last = G.qa.length ? G.qa[G.qa.length - 1] : null;
     var q = K.phrase(c.a, r, used, last && G.qa.length && now - (last.at || 0) < 20000 * G.T.k ? last.ans : null);
@@ -188,6 +188,13 @@ function npcAsk(G, i, now) {
   }
 }
 
+// NPCが 名前を言うときの「根拠」：これまでの「はい」の答えのうち、その名前にも当てはまるもの（直近から）
+function basis(G, w) {
+  var v = G.db.words[w].v, qs = G.qa.filter(function (e) { return e.rec && e.rec.a != null && e.rec.ans === 'y' && !e.rec.neg && v[e.rec.a] === 1; });
+  if (!qs.length) { var nr = G.qa.filter(function (e) { return e.rec && e.rec.w >= 0 && e.rec.ans === 'near'; }).pop(); return nr ? '「' + G.db.words[nr.rec.w].w + '」が近いなら… ' : ''; }
+  var q = K.ATTRS[qs[qs.length - 1].rec.a].q.replace(/^それは\s*/, '').replace(/[？?]$/, '');
+  return '「' + q + '」で はいだったから… ';
+}
 // ---------- 話し合い ----------
 function startTalk(G, now) {
   G.phase = 'talk';
