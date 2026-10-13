@@ -179,6 +179,8 @@ function npcAsk(G, i, now) {
   var Pc = Object.assign({}, P); Pc.gTh = Math.min(0.97, Math.max(0.12, P.gTh + (ch ? ch.ps.eager : 0)));
   if (role === 'insider') c = B.chooseInsider(G.pub, Pc, G.secret, { frac: frac, r: r });
   else c = B.chooseCommon(G.pub, Pc, { frac: frac, r: r });
+  // 言う直前に もう一度：公開の情報で まだ たどりつけないなら、ふつうの質問にきりかえる（やさしい の時間ぎれは除く）
+  if (role === 'insider' && c.w === G.secret && !B.insiderOk(G.pub, Pc, G.secret) && !(Pc.lv === 'easy' && frac >= 0.9)) { c = B.chooseCommon(G.pub, Object.assign({}, Pc, { gTh: 2 }), { frac: frac, r: r }); if (c.w === G.secret) return; }
   var text;
   if (c.w != null) { if (G.pub.dead[c.w] && c.w !== G.secret) return; text = line(G, i, 'guess', { w: G.db.words[c.w].w, p: pct(c.p || 0.5) }); var why = basis(G, c.w); if (why && r() < (role === 'insider' ? 0.85 : 0.4)) text = why + text; L.ask(G, i, { w: c.w }, now, { text: text }); }
   else {
