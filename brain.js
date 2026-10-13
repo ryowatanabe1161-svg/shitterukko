@@ -19,7 +19,7 @@ B.fromVec = function (v) { var P = {}; B.PKEYS.forEach(function (k, i) { P[k[0]]
 // 強さ：学習済み方針に どれだけ寄せるか(mix)、判断のブレ(noise)、質問のまちがい率(slop)、間合い(gap 秒)
 B.LV = {
   easy:   { mix: 0.0, noise: 1.4, slop: 0.30, gap: [15, 23], sigX: 2.2, gThX: -0.25, name: 'やさしい' },
-  normal: { mix: 0.4, noise: 0.8, slop: 0.12, gap: [11, 17], sigX: 1.0, gThX: -0.08, name: 'ふつう' },
+  normal: { mix: 0.6, noise: 0.8, slop: 0.04, gap: [10, 15], sigX: 1.0, gThX: -0.08, name: 'ふつう' },
   smart:  { mix: 0.8, noise: 0.35, slop: 0.03, gap: [9, 14], sigX: 0, gThX: 0, name: 'かしこい' },
   ultra:  { mix: 1.0, noise: 0.0, slop: 0, gap: [8, 12], sigX: 0, gThX: 0, name: 'アストラウルトラ😎' }
 };
@@ -76,7 +76,9 @@ B.apply = function (S, rec) {
   }
   var ans = rec.ans; if (rec.neg && ans !== 'u') ans = { y: 'n', n: 'y', py: 'pn', pn: 'py', sp: 'n' }[ans] || ans;
   var a = rec.a, words = S.db.words;
-  for (var i = 0; i < S.N; i++) S.lw[i] += Math.log(lik(S, words[i].v[a], ans));
+  // 人間のおだいばんは 作品・キャラ（固有名）に「ゲーム？」「アニメ？」と聞かれると「いいえ（ひとつの作品だから）」と答えがち：その いいえ は弱めに
+  var soft = S.eps >= 0.05 && ans === 'n' && K.ATTRS[a].g === 'kind', pi = K.AI.proper;
+  for (var i = 0; i < S.N; i++) { var l = lik(S, words[i].v[a], ans); if (soft && words[i].v[pi] === 1 && words[i].v[a] === 1) l = Math.max(l, 0.35); S.lw[i] += Math.log(l); }
   S.asked[a] = (S.asked[a] || 0) + 1;
   // 「ボールを蹴る？」のような組み合わせ：はい なら どれも はい
   if (rec.also && rec.ans === 'y') rec.also.forEach(function (x) { var an = x.neg ? 'n' : 'y'; for (var k = 0; k < S.N; k++) S.lw[k] += Math.log(lik(S, words[k].v[x.a], an)); });
@@ -148,9 +150,10 @@ function attrCands(S, pr) {
   }
   return { list: out, best: best };
 }
+B.guessTh = function (P, frac) { var t = Math.max(0.12, P.gTh - P.gLate * Math.max(0, frac - 0.5) * 2); return Math.max(0.05, t * (1 - 0.7 * Math.min(1, Math.max(0, (frac - 0.6) / 0.35)))); };
 // ふつうの人（たんてい・おだいばんを除くNPC）が聞く質問。ctx = {frac:経過割合, r:乱数, wrong:{}(自分がもう外した単語)}
 B.chooseCommon = function (S, P, ctx) {
-  var pr = B.probs(S), r = ctx.r, th = Math.max(0.12, P.gTh - P.gLate * Math.max(0, ctx.frac - 0.5) * 2);
+  var pr = B.probs(S), r = ctx.r, th = B.guessTh(P, ctx.frac);   // 終わりぎわは 上位から どんどん言ってみる
   if (pr.pt >= th) return { w: pr.top, why: 'guess', p: pr.pt };
   var C = attrCands(S, pr);
   if (!C.list.length || C.best < 0.02) return { w: pr.top, why: 'guess', p: pr.pt };
@@ -160,11 +163,12 @@ B.chooseCommon = function (S, P, ctx) {
 };
 // しってるっこ（答え w を知っている）が聞く質問。公開の推理 S を見て、「ふつうに見えて、正解に寄る」質問を選ぶ
 // しってるっこの「ばれにくさ」：公開の推理で 上位K位以内＆確率th以上のときだけ 正解を言う。hold：ふつうの人に 先に当てさせる割合
-B.ILV = { easy: { K: 6, th: 0.10, hold: 0.10, last: 0.9, bias: 0.3, late: 0.8 }, normal: { K: 4, th: 0.18, hold: 0.30, last: 2, bias: 0.05, late: 0.3 }, smart: { K: 3, th: 0.25, hold: 0.45, last: 2, bias: 0.1, late: 0.5 }, ultra: { K: 3, th: 0.30, hold: 0.55, last: 2, bias: 0.08, late: 0.4 } };
+B.ILV = { easy: { K: 6, th: 0.10, hold: 0.10, last: 0.9, bias: 0.3, late: 0.8 }, normal: { K: 4, th: 0.18, hold: 0.15, last: 2, bias: 0, late: 0 }, smart: { K: 3, th: 0.25, hold: 0.45, last: 2, bias: 0.04, late: 0.2 }, ultra: { K: 3, th: 0.30, hold: 0.55, last: 2, bias: 0.08, late: 0.4 } };
+B.insiderOk = function (S, P, w) { var IL = B.ILV[P.lv] || B.ILV.normal, pr = B.probs(S); return B.pubRank(pr, w) < IL.K && pr.p[w] >= IL.th; };
 B.pubRank = function (pr, w) { var pw = pr.p[w], k = 0; for (var i = 0; i < pr.p.length; i++) if (pr.p[i] > pw) k++; return k; };
 // しってるっこ（答え w を知っている）が聞く質問。公開の推理 S を見て、「ふつうに見えて、正解に寄る」質問を選ぶ
 // しってるっこの「ばれにくさ」：公開の推理で 上位K位以内＆確率th以上のときだけ 正解を言う。hold：ふつうの人に 先に当てさせる割合
-B.ILV = { easy: { K: 6, th: 0.10, hold: 0.10, last: 0.9, bias: 0.3, late: 0.8 }, normal: { K: 4, th: 0.18, hold: 0.30, last: 2, bias: 0.05, late: 0.3 }, smart: { K: 3, th: 0.25, hold: 0.45, last: 2, bias: 0.1, late: 0.5 }, ultra: { K: 3, th: 0.30, hold: 0.55, last: 2, bias: 0.08, late: 0.4 } };
+B.ILV = { easy: { K: 6, th: 0.10, hold: 0.10, last: 0.9, bias: 0.3, late: 0.8 }, normal: { K: 4, th: 0.18, hold: 0.15, last: 2, bias: 0, late: 0 }, smart: { K: 3, th: 0.25, hold: 0.45, last: 2, bias: 0.04, late: 0.2 }, ultra: { K: 3, th: 0.30, hold: 0.55, last: 2, bias: 0.08, late: 0.4 } };
 B.pubRank = function (pr, w) { var pw = pr.p[w], k = 0; for (var i = 0; i < pr.p.length; i++) if (pr.p[i] > pw) k++; return k; };
 // 答え w に近くて、公開の推理でも上位にある「おしいハズレ」（言うと おだいばんの「近い」で 正解が浮かびあがる）
 function nearMiss(S, pr, w) {
@@ -184,8 +188,10 @@ B.chooseInsider = function (S, P, w, ctx) {
     if (want && !(others && frac < 0.85 && r() < IL.hold)) return { w: w, why: 'guess', p: pw };
   } else if (frac >= IL.last) return { w: w, why: 'guess', p: pw };   // やさしい：時間ぎれ寸前は あてずっぽう
   // ふつうの人と同じ基準で「それは○○？」（公開の推理のいちばん上。ハズレでも自然）
-  var th = Math.max(0.12, P.gTh - P.gLate * Math.max(0, frac - 0.5) * 2);
+  var th = B.guessTh(P, frac);
   if (pr.top !== w && pr.pt >= th) return { w: pr.top, why: 'decoy', p: pr.pt };
+  // ふつうの人なら ここで「それは○○？」と言う場面（いちばん上が答え）：ゆずるときは 2番目の候補を言ってみる（ふつうの人のハズレと同じ頻度に）
+  if (pr.top === w && pr.pt >= th) { var s2 = -1; for (var i2 = 0; i2 < S.N; i2++) if (i2 !== w && !S.dead[i2] && (s2 < 0 || pr.p[i2] > pr.p[s2])) s2 = i2; if (s2 >= 0 && pr.p[s2] >= 0.06 && r() < 0.6) return { w: s2, why: 'decoy', p: pr.p[s2] }; }
   var C = attrCands(S, pr); if (!C.list.length || C.best < 0.02) return pr.top !== w ? { w: pr.top, why: 'decoy', p: pr.pt } : { w: w, why: 'guess', p: pw };
   // 質問：ふつうの人と同じ「自然な次の質問」の分布から選ぶ。ときどき（強さで上限）自然な候補の中で 答え寄りのものを選ぶ
   var words = S.db.words, items = C.list.map(function (x) {
