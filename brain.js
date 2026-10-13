@@ -159,19 +159,39 @@ B.chooseCommon = function (S, P, ctx) {
   return { a: pk.a, ig: pk.ig, why: 'ask' };
 };
 // しってるっこ（答え w を知っている）が聞く質問。公開の推理 S を見て、「ふつうに見えて、正解に寄る」質問を選ぶ
+// しってるっこの「ばれにくさ」：公開の推理で 上位K位以内＆確率th以上のときだけ 正解を言う。hold：ふつうの人に 先に当てさせる割合
+B.ILV = { easy: { K: 6, th: 0.10, hold: 0.10, last: 0.9 }, normal: { K: 4, th: 0.18, hold: 0.30, last: 2 }, smart: { K: 3, th: 0.25, hold: 0.45, last: 2 }, ultra: { K: 3, th: 0.30, hold: 0.55, last: 2 } };
+B.pubRank = function (pr, w) { var pw = pr.p[w], k = 0; for (var i = 0; i < pr.p.length; i++) if (pr.p[i] > pw) k++; return k; };
+// 答え w に近くて、公開の推理でも上位にある「おしいハズレ」（言うと おだいばんの「近い」で 正解が浮かびあがる）
+function nearMiss(S, pr, w) {
+  var nv = nearVec(S.db, w), best = -1, bs = -Infinity, order = [];
+  for (var i = 0; i < S.N; i++) if (i !== w && !S.dead[i] && pr.p[i] > 0) order.push(i);
+  order.sort(function (x, y) { return pr.p[y] - pr.p[x]; });
+  order.slice(0, 10).forEach(function (i, rk) { var s = nv[i] - 0.25 * rk; if (s > bs) { bs = s; best = i; } });
+  return bs > 1.2 ? best : -1;
+}
+// しってるっこ（答え w を知っている）が聞く質問。公開の推理 S を見て、「ふつうに見えて、正解に寄る」質問を選ぶ
 B.chooseInsider = function (S, P, w, ctx) {
-  var pr = B.probs(S), r = ctx.r, frac = ctx.frac, pw = pr.p[w];
-  // 当てに行く：みんなが十分しぼれている（自然）／時間ぎれ寸前
-  if ((pr.top === w && pw >= P.iTh) || frac >= P.iEm) return { w: w, why: 'guess', p: pw };
+  var pr = B.probs(S), r = ctx.r, frac = ctx.frac, pw = pr.p[w], IL = B.ILV[P.lv] || B.ILV.normal;
+  var rank = B.pubRank(pr, w), ok = rank < IL.K && pw >= IL.th;   // みんなの情報から たどりつける？
+  if (ok) {
+    var others = pr.top === w ? pr.pt >= 0.45 : false;   // ほかの人も 気づきそう → ときどき ゆずる
+    var want = (pr.top === w && pw >= P.iTh) || frac >= P.iEm;
+    if (want && !(others && frac < 0.85 && r() < IL.hold)) return { w: w, why: 'guess', p: pw };
+  } else if (frac >= IL.last) return { w: w, why: 'guess', p: pw };   // やさしい：時間ぎれ寸前は あてずっぽう
+  // 時間が おしてきた／ほぼ しぼれた：近いハズレを言って「近い」を引き出す
+  if (!ok && (frac >= P.iEm || rank < IL.K * 3) && r() < (frac >= P.iEm ? 0.5 : 0.12)) { var nm = nearMiss(S, pr, w); if (nm >= 0) return { w: nm, why: 'decoy', p: pr.p[nm] }; }
   // ときどき「それは○○？」とハズレを言って まぎれる（上位候補から）
   if (P.decoy > 0 && r() < P.decoy * 0.5 && pr.top !== w && pr.pt > 0.15 && pr.pt < 0.6) return { w: pr.top, why: 'decoy', p: pr.pt };
-  var C = attrCands(S, pr); if (!C.list.length) return { w: w, why: 'guess', p: pw };
+  var C = attrCands(S, pr); if (!C.list.length) { var nm2 = nearMiss(S, pr, w); return nm2 >= 0 && !ok ? { w: nm2, why: 'decoy', p: pr.p[nm2] } : { w: w, why: 'guess', p: pw }; }
   // ふつうの人っぽさ：ときどき「まあまあ役に立つ」質問をそのまま聞く（誘導しない）
-  if (P.iSub > 0 && r() < P.iSub) {
+  var sub = Math.max(P.iSub || 0, ok ? 0.15 : 0);
+  if (sub > 0 && r() < sub) {
     var mid = C.list.filter(function (x) { return x.ig >= 0.3 * C.best && x.ig <= 0.8 * C.best; });
     if (mid.length) { var mq = mid[Math.floor(r() * mid.length)]; return { a: mq.a, ig: mq.ig, why: 'plain' }; }
   }
   var sig = P.sig + (frac > 0.5 ? P.sigLate * (frac - 0.5) * 2 : 0);
+  if (!ok && frac >= P.iEm && (P.lv === 'easy' || P.lv === 'normal')) sig = Math.max(sig, 0.8);   // 時間が おしてきたら 少しだけ 答えのほうへ わける質問
   if (P.iRamp > 0 && frac < P.iRamp) sig *= frac / P.iRamp;   // はじめのうちは 誘導をひかえる
   var words = S.db.words, items = C.list.map(function (x) {
     var t = words[w].v[x.a], ans = t === 1 ? 'y' : t === 0 ? 'n' : 'u';
