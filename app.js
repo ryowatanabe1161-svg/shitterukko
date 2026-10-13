@@ -235,3 +235,16 @@ setInterval(function () {
   else if (host && (g.phase === 'talk' || g.phase === 'deal')) { autoAt = now; act('skip'); }
 }, 60);
 renderTitle();
+
+// ---- ひろばの「みんなの部屋」：同じメンバーで自動入室＋ホストは「つぎのゲーム」 ----
+if (PARTY) {
+  FuuParty.init({ game: 'shitterukko',
+    isHost: function () { return !!host && !host.room.solo; },
+    canSwitch: function () { return !host || host.room.phase === 'lobby' || host.room.phase === 'end'; },
+    broadcast: function (m) { if (host) Object.keys(host.conns).forEach(function (cid) { try { host.conns[cid].send(m); } catch (e) {} }); } });
+  $('nameIn').value = cleanName(PARTY.name) || 'ななし';
+  setTimeout(function () {
+    if (PARTY.host) { store(LS_HOST, null); startHost(cleanName(PARTY.name) || 'ホスト', null, false); }
+    else startClient(PARTY.code, cleanName(PARTY.name) || 'ななし');
+  }, 50);
+}
