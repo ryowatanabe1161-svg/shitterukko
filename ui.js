@@ -191,7 +191,7 @@ function nightUi(g) {
     sfx.flip(); setTimeout(sfx.flip, 600);
   } else if (g.eyes === 'open' && g.role === 'master') {
     h = '<div class="nt">👑 おだいばん だけ 目をあけて</div><div class="wcard"><small>お題</small><b>' + esc(g.word) + '</b><span class="cat">' + esc(g.cat || '') + '</span></div>' +
-      '<p class="nsub">知らない言葉なら かえてね（公式ルール）</p><div class="row"><button class="btn" id="swapBtn"' + (g.swaps >= 30 ? ' disabled' : '') + '>🔄 お題をかえる</button><button class="btn main" id="mOkBtn">👌 OK・目をとじる</button></div>';
+      '<p class="nsub">知らない言葉なら かえてね（ルール）</p><div class="row"><button class="btn" id="swapBtn"' + (g.swaps >= 30 ? ' disabled' : '') + '>🔄 お題をかえる</button><button class="btn main" id="mOkBtn">👌 OK・目をとじる</button></div>';
   } else if (g.eyes === 'open' && g.role === 'insider') {
     h = '<div class="nt">🤫 しってるっこ だけ 目をあけて</div><div class="wcard ins"><small>お題</small><b>' + esc(g.word) + '</b><span class="cat">' + esc(g.cat || '') + '</span></div><p class="nsub">おぼえたら 目をとじてね。バレないように みんなを ここへ みちびこう</p>';
     sfx.turn(); vibrate([60, 60, 60]);
